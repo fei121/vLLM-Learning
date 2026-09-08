@@ -1,0 +1,47 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart LR
+    input[输入规范化]
+    client[引擎客户端 / IPC 路由<br/><i>EngineCore client</i>]
+    request[请求与状态<br/><i>Request</i>]
+    sched[调度输出<br/><i>SchedulerOutput</i>]
+    kv[KV / 编码器缓存]
+    runner[GPU 运行器]
+    sample[采样<br/><i>sampling</i>]
+    output[输出处理器]
+    input --> client --> request --> sched --> kv --> runner --> sample --> output
+
+    mm[多模态] -.-> input
+    mm -.-> kv
+    structured[结构化输出<br/><i>structured output</i>] -.-> request
+    structured -.-> sample
+    lora[LoRA] -.-> sched
+    lora -.-> runner
+    spec[投机解码<br/><i>speculative decoding</i>] -.-> sched
+    spec -.-> runner
+    spec -.-> sample
+    transfer[KV 传输 / 卸载<br/><i>KV transfer</i>] -.-> sched
+    transfer -.-> kv
+    tp[张量并行<br/><i>Tensor Parallel</i>] -.-> runner
+    pp[流水线并行<br/><i>Pipeline Parallel</i>] -.-> sched
+    pp -.-> runner
+    dp[数据并行 / 路由<br/><i>Data Parallel</i>] -.-> client
+    dp -.-> sched
+
+    classDef main fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef capability fill:#ECFDF5,stroke:#059669,color:#172033
+    class input,client,request,sched,kv,runner,sample,output main
+    class mm,structured,lora,spec,transfer,tp,pp,dp capability

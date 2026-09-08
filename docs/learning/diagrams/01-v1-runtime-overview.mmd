@@ -1,0 +1,66 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#94A3B8"
+---
+flowchart LR
+    client([客户端<br/><i>OpenAI HTTP</i>])
+
+    subgraph api[API 服务进程 · 前台]
+        router[API 路由<br/><i>OpenAIServingChat</i>]
+        serving[聊天服务<br/><i>ServingChat</i>]
+        llm[引擎客户端<br/><i>AsyncLLM</i>]
+        input[输入处理器<br/><i>InputProcessor</i>]
+        mp[消息通道<br/><i>AsyncMPClient</i>]
+        handler[后台输出处理<br/><i>output_handler</i>]
+        output[输出处理器<br/><i>OutputProcessor</i>]
+        collector[(输出收集器<br/><i>RequestOutputCollector</i>)]
+    end
+
+    subgraph coreproc[EngineCore 进程 · 后台]
+        proc[引擎核心进程<br/><i>EngineCoreProc</i>]
+        sched[调度器<br/><i>Scheduler</i>]
+        executor[执行器<br/><i>Executor</i>]
+    end
+
+    subgraph execution[执行层 · 进程边界由 Executor 后端决定]
+        worker[GPU 工作进程<br/><i>Worker</i>]
+        runner[模型运行器<br/><i>GPUModelRunner</i>]
+        attn[注意力后端<br/><i>Attention</i>]
+        kv[(GPU KV 缓存)]
+    end
+
+    client -->|HTTP 请求| router --> serving
+    serving -->|消费异步生成器| llm
+    llm --> input
+    llm -->|创建| collector
+    llm -->|先登记前端状态| output
+    output -.->|按 request_id 投递| collector
+    llm -->|再提交引擎请求| mp
+    mp -.->|ZMQ ADD / ABORT| proc
+    proc --> sched
+    proc --> executor --> worker --> runner --> attn
+    attn <--> kv
+    runner --> worker --> executor --> proc
+    proc -.->|ZMQ EngineCoreOutputs| mp
+    mp -->|共享输出队列| handler --> output
+    collector -->|RequestOutput| serving -->|SSE 流式| client
+
+    classDef control fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef data fill:#ECFDF5,stroke:#059669,color:#172033
+    classDef gpu fill:#FFF7ED,stroke:#C2410C,color:#172033
+    class router,serving,llm,input,mp,handler,output,proc,sched,executor control
+    class collector data
+    class worker,runner,attn,kv gpu

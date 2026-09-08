@@ -1,0 +1,43 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart TD
+    lookup[首次接纳<br/><i>get_computed_blocks</i>] --> enabled{启用前缀缓存读取?}
+    enabled -->|否| miss[命中 0 token]
+    enabled -->|是| cap[最大查找长度 = 请求 token 数 − 1]
+    cap --> longest[找最长兼容 token 前缀<br/><i>find_longest_cache_hit</i>]
+    longest --> hit{存在命中?}
+    hit -->|否| miss
+    hit -->|是| touch[触碰块：移出空闲队列，引用计数 +1<br/><i>BlockPool.touch</i>]
+    touch --> partial{命中落在管理器块内部?}
+    partial -->|否| allocate
+    partial -->|是，细粒度管理器| cow[安排局部尾部写时复制<br/><i>copy-on-write</i>]
+    cow --> allocate[分配槽位<br/>接入命中块并补足槽位]
+    miss --> allocate
+    allocate --> compute[计算缺失的 token]
+    compute --> commit[提交完整 token 块入缓存<br/><i>cache_blocks</i>]
+    commit --> release[请求结束或抢占<br/>释放块，引用计数递减]
+    release --> refs{引用计数为 0?}
+    refs -->|否| shared([仍被其他请求引用])
+    refs -->|是且无哈希| uncached([空闲队列前部<br/>优先分配])
+    refs -->|是且有哈希| cached[保留哈希，入空闲队列尾部<br/>可被命中，也是淘汰候选]
+    cached --> fate{先发生什么?}
+    fate -->|新请求哈希命中| retouch([触碰：重新成为使用中])
+    fate -->|被取走| evict([删除旧哈希<br/>物理块重新分配])
+
+    classDef decision fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef cache fill:#ECFDF5,stroke:#059669,color:#172033
+    class enabled,hit,partial,refs,fate decision
+    class touch,commit,cached,retouch,shared cache

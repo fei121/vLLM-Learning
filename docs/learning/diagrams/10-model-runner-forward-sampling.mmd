@@ -1,0 +1,58 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart TD
+    config{模型运行器版本?<br/><i>use_v2_model_runner</i>}
+    v1[运行器 V1<br/><i>Model Runner V1</i>]
+    v2[运行器 V2<br/><i>Model Runner V2</i>]
+    schedout[调度输出<br/><i>SchedulerOutput</i>]
+    state[结束 / 释放 / 新增 / 更新<br/>持久请求与块表状态]
+    tokens{本轮调度 token 数 > 0?}
+    noforward[空执行 / KV 连接器免前向]
+    prepare[准备输入 ID、位置、块表<br/>槽位映射、注意力元数据]
+    mode{运行模式}
+    eager[即时前向<br/><i>eager</i>]
+    piece[分段编译图<br/><i>piecewise</i>]
+    full[完整 CUDA 图重放<br/><i>CUDA graph</i>]
+    pp{最后一个流水线 rank?<br/><i>PP rank</i>}
+    intermediate[返回中间张量<br/><i>IntermediateTensors</i>]
+    logits[隐藏状态 → 计算 logits]
+    phase[执行返回空<br/>引擎核心再调采样]
+    grammar[应用语法掩码<br/><i>grammar bitmask</i>]
+    sampler[采样器前向<br/><i>logits 处理 / 温度 / top-k / top-p</i>]
+    result[模型运行输出<br/><i>ModelRunnerOutput</i>]
+
+    config -->|否| v1
+    config -->|是| v2
+    schedout --> v1
+    schedout --> v2
+    v1 --> state
+    v2 --> state
+    state --> tokens
+    tokens -->|否| noforward
+    tokens -->|是| prepare --> mode
+    mode -->|无| eager
+    mode -->|分段| piece
+    mode -->|完整| full
+    eager --> pp
+    piece --> pp
+    full --> pp
+    pp -->|否| intermediate
+    pp -->|是| logits --> phase --> grammar --> sampler --> result
+
+    classDef decision fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef resultStyle fill:#ECFDF5,stroke:#059669,color:#172033
+    class config,tokens,mode,pp decision
+    class schedout,phase,result resultStyle

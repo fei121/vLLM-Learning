@@ -1,0 +1,53 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart TD
+    start([调度<br/><i>Scheduler.schedule</i>]) --> budget[初始化 token / 编码器预算<br/><i>new_step_starts</i>]
+    budget --> running[遍历 running 请求]
+    running --> eligible{本请求本步可推进?}
+    eligible -->|否：节奏 / 限流 / 0 token| nextrun[跳过它，继续考察后面的请求]
+    nextrun --> running
+    eligible -->|是| calc[计算并裁剪本轮 token 数]
+    calc --> alloc{分配槽位成功?<br/><i>allocate_slots</i>}
+    alloc -->|是| record[记入本轮调度<br/>扣减预算]
+    record --> running
+    alloc -->|否| victim[选最低优先级 / 队尾受害请求<br/><i>_preempt_request</i>]
+    victim --> self{受害请求就是当前请求?}
+    self -->|否| alloc
+    self -->|是| nowait[结束 running 遍历]
+    running -->|遍历完成或预算耗尽| preempted{本轮发生过抢占?}
+    nowait --> preempted
+    preempted -->|是| build[跳过 waiting 接纳]
+    preempted -->|否| waiting[从 waiting / 跳过等待 选队头]
+    waiting --> promote{阻塞状态已可提升?}
+    promote -->|否| skip[放入本轮跳过列表，继续考察]
+    skip --> waiting
+    promote -->|是或普通等待| guards{过期输出 / LoRA / 并发限制通过?}
+    guards -->|否，可跳过| skip
+    guards -->|是| prefix[若还未计算<br/>查本地 / 远端前缀]
+    prefix --> fit{预算、编码器与 KV 容量可满足?}
+    fit -->|否| build
+    fit -->|远端异步加载| remotewait[等待远端 KV<br/>可分配但不前向]
+    remotewait --> waiting
+    fit -->|是| admit[移入运行中，记录新增 / 恢复]
+    admit --> waiting
+    waiting -->|无候选或预算耗尽| build[构造调度输出<br/><i>SchedulerOutput</i>]
+    build --> advance[推进已计算 / 在途状态<br/><i>_update_after_schedule</i>]
+    advance --> done([返回调度输出])
+
+    classDef decision fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef state fill:#ECFDF5,stroke:#059669,color:#172033
+    class eligible,alloc,self,preempted,promote,guards,fit decision
+    class skip,remotewait,admit,advance state

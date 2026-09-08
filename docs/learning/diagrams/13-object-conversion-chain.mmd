@@ -1,0 +1,41 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#FFF7ED"
+    tertiaryColor: "#ECFDF5"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart LR
+    http[HTTP request]:::api
+    einput[EngineInput<br/><i>PromptType</i>]:::api
+    ecreq[EngineCoreRequest]:::api
+    req[Request]:::core
+    schedout[SchedulerOutput]:::core
+    mrout[ModelRunnerOutput]:::gpu
+    ecout[EngineCoreOutputs]:::core
+    rout[RequestOutput]:::api
+    sse[SSE chunk]:::api
+
+    http -->|OpenAIServingChat<br/>校验/套模板/tokenize| einput
+    einput -->|InputProcessor<br/>加工转换| ecreq
+    ecreq -->|ZMQ 跨进程<br/>AsyncMPClient| req
+    req -->|Scheduler.schedule<br/>组队·分 token·分 KV| schedout
+    schedout -->|Executor → Worker<br/>GPU forward + sampling| mrout
+    mrout -->|update_from_output<br/>写回状态·追加 token| ecout
+    ecout -->|ZMQ 回传<br/>output_handler| rout
+    rout -->|stream 生成器<br/>编码| sse
+
+    classDef api fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef core fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef gpu fill:#ECFDF5,stroke:#059669,color:#172033
+    class http,einput,ecreq,rout,sse api
+    class req,schedout,ecout core
+    class mrout gpu

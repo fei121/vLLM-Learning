@@ -1,0 +1,55 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+sequenceDiagram
+    autonumber
+    participant Core as 引擎核心进程 (EngineCoreProc)
+    participant MP as 消息通道 (AsyncMPClient)
+    participant Handler as 后台输出处理 (output_handler)
+    participant Processor as 输出处理器 (OutputProcessor)
+    participant Detok as 增量解码器 (IncrementalDetokenizer)
+    participant Q as 输出收集器 (RequestOutputCollector)
+    participant Gen as 生成器 (generate)
+    participant SSE as 聊天流 (stream generator)
+
+    Core--)MP: 共享 IPC 返回引擎输出
+    MP->>Handler: 取输出
+    loop 按输出分块大小处理
+        Handler->>Processor: 处理一批输出
+        Processor->>Detok: 更新（新 token / 停止标记）
+        Detok-->>Processor: 文本增量 / 命中的停止字符串
+        Processor->>Q: 放入请求输出
+    end
+    Q-->>Gen: 请求输出
+    Gen-->>SSE: 产出请求输出
+    SSE-->>SSE: 编码为 SSE 分块
+
+    alt 引擎已给出结束原因
+        Processor->>Processor: 结束请求并移除前端状态
+    else 解码器先命中停止字符串
+        Processor->>Processor: 生成 STOP 最终输出并移除状态
+        Processor-->>Handler: 待中止请求
+        Handler-)MP: 异步中止请求
+        MP-)Core: ABORT 消息，终止仍在引擎的请求
+    else 客户端断开 / 生成器取消
+        Gen->>Processor: 中止请求，移除状态并产生 ABORT 输出
+        Gen-)MP: 异步中止请求
+        MP-)Core: ABORT 消息
+        Gen->>Q: 关闭收集器
+    else 输出处理 / 引擎错误
+        Handler->>Processor: 传播异常
+        Processor->>Q: 为所有未完成请求放入异常
+        Q-->>Gen: 抛出错误
+    end

@@ -1,0 +1,71 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#FFF7ED"
+    tertiaryColor: "#ECFDF5"
+    lineColor: "#475569"
+    textColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#94A3B8"
+---
+flowchart LR
+    subgraph api_proc[API 进程 · 前台]
+        direction TB
+        serving[OpenAI 接口层<br/><i>OpenAIServingChat</i>]
+        async_llm[引擎客户端<br/><i>AsyncLLM</i>]
+        input[输入处理器<br/><i>InputProcessor</i>]
+        output[输出处理器<br/><i>OutputProcessor</i>]
+        mp_client[消息通道<br/><i>AsyncMPClient</i>]
+        serving -->|持有| async_llm
+        async_llm -->|持有| input
+        async_llm -->|持有| output
+        async_llm -->|持有| mp_client
+    end
+
+    subgraph core_proc[EngineCore 进程 · 后台]
+        direction TB
+        ec_proc[引擎核心<br/><i>EngineCoreProc</i>]
+        sched[调度器<br/><i>Scheduler</i>]
+        executor[执行器<br/><i>Executor</i>]
+        struct_mgr[结构化输出管理器<br/><i>StructuredOutputManager</i>]
+        ec_proc -->|创建并持有| sched
+        ec_proc -->|创建并持有| executor
+        ec_proc -->|创建并持有| struct_mgr
+    end
+
+    subgraph worker_proc[Worker 进程 ×N · 每个 GPU 一个]
+        direction TB
+        worker[GPU 工作进程<br/><i>Worker</i>]
+        runner[模型运行器<br/><i>GPUModelRunner</i>]
+        sampler[采样器<br/><i>Sampler</i>]
+        model[模型权重<br/><i>model + CUDA Graph</i>]
+        worker -->|创建并持有| runner
+        runner -->|创建并持有| sampler
+        runner -->|加载| model
+    end
+
+    api_proc ==>|"ZMQ 通信<br/>下发请求 · 回传输出"| core_proc
+    core_proc ==>|"集体通信 RPC<br/>分发批次 · 回收结果"| worker_proc
+
+    classDef apiNode fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef coreNode fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef workerNode fill:#ECFDF5,stroke:#059669,color:#172033
+    class serving,async_llm,input,output,mp_client apiNode
+    class ec_proc,sched,executor,struct_mgr coreNode
+    class worker,runner,sampler,model workerNode
+
+    linkStyle 0,1,2,3 stroke:#334155,stroke-width:1.5px
+    linkStyle 4,5,6 stroke:#334155,stroke-width:1.5px
+    linkStyle 7,8,9 stroke:#334155,stroke-width:1.5px
+    linkStyle 10,11 stroke:#059669,stroke-width:2px,stroke-dasharray:6 4
+
+    style api_proc fill:#F8FAFC,stroke:#94A3B8,stroke-width:1.5px
+    style core_proc fill:#F8FAFC,stroke:#94A3B8,stroke-width:1.5px
+    style worker_proc fill:#F8FAFC,stroke:#94A3B8,stroke-width:1.5px

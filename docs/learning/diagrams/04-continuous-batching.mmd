@@ -1,0 +1,34 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart TD
+    start([新一轮 engine step]) --> delta[计算每个请求的待处理 token 数<br/><i>num_tokens_with_spec − num_computed</i>]
+    delta --> limits[按 token 预算 / 模型长度 / 编码器预算<br/>和长 prefill 阈值裁剪]
+    limits --> slots{分配槽位成功?<br/><i>allocate_slots</i>}
+    slots -->|否| preempt[抢占并重置已计算数 / KV<br/>或停止本轮选择]
+    preempt --> result
+    slots -->|是| result[构造调度输出<br/><i>SchedulerOutput</i>]
+    result --> advance[推进已计算数<br/><i>_update_after_schedule</i>]
+    advance --> execute[执行前向 / 采样]
+    execute --> settle[结算本轮输出<br/><i>update_from_output</i>]
+    settle --> status{请求结束?}
+    status -->|否| start
+    status -->|是| free[释放请求引用；缓存块可继续留存]
+    free --> start
+
+    classDef decision fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef state fill:#ECFDF5,stroke:#059669,color:#172033
+    class slots,status decision
+    class result,advance,settle state

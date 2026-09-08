@@ -1,0 +1,56 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#FFF7ED"
+    tertiaryColor: "#ECFDF5"
+    lineColor: "#475569"
+    textColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#94A3B8"
+---
+flowchart LR
+    subgraph logical[① 逻辑视图 · 请求侧]
+        positions[token 位置<br/><i>0..num_tokens-1</i>]
+        hashes[前缀哈希<br/><i>block_hashes</i>]
+    end
+
+    subgraph scheduler[② 所有权视图 · Scheduler / KV 管理器]
+        coord[KV 协调器<br/><i>KVCacheCoordinator</i>]
+        mapping[请求→块映射<br/><i>req_to_blocks</i>]
+        pool[块池<br/><i>BlockPool</i>]
+        block[块对象<br/><i>block_id + 引用计数 + 哈希</i>]
+    end
+
+    subgraph worker[③ 执行视图 · Worker]
+        schedout[调度输出<br/><i>SchedulerOutput</i>]
+        persistent[持久块表<br/><i>BlockTables</i>]
+        gathered[本批块表<br/><i>input block tables</i>]
+        slots[槽位映射<br/><i>slot mapping</i>]
+        tensor[(GPU KV 缓存张量)]
+    end
+
+    positions --> coord
+    hashes -->|前缀查找| coord
+    coord --> mapping
+    mapping --> block
+    pool --- block
+    block -->|取块 ID| schedout
+    schedout -->|追加 / 暂存写入| persistent
+    persistent -->|收集块表| gathered
+    persistent -->|位置 + 查询起点| slots
+    gathered -->|读历史 K/V| tensor
+    slots -->|写本轮 K/V| tensor
+
+    classDef logicalStyle fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef ownerStyle fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef gpuStyle fill:#ECFDF5,stroke:#059669,color:#172033
+    class positions,hashes logicalStyle
+    class coord,mapping,pool,block ownerStyle
+    class schedout,persistent,gathered,slots,tensor gpuStyle

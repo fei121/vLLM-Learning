@@ -1,0 +1,41 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#FFF7ED"
+    tertiaryColor: "#ECFDF5"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart LR
+    scope[模型运行器内的块表路径<br/><i>Model Runner</i>]
+    sched[调度输出<br/><i>块 ID + 调度 token 数</i>]
+    state[更新持久请求状态]
+    append[追加块 ID<br/><i>append_block_ids</i>]
+    gather[收集块表<br/><i>gather_block_tables</i>]
+    slots[计算槽位映射<br/><i>compute_slot_mappings</i>]
+    meta[注意力元数据<br/><i>长度 · 块表 · 槽位</i>]
+    backend[注意力后端前向<br/><i>Attention</i>]
+    kv[(GPU KV 缓存)]
+    hidden[隐藏状态<br/><i>hidden states</i>]
+
+    scope --> sched --> state --> append
+    append --> gather --> meta
+    append --> slots --> meta
+    meta --> backend
+    backend -->|写入新 K/V| kv
+    kv -->|按块表读历史 K/V| backend
+    backend --> hidden
+
+    classDef control fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef address fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef gpu fill:#ECFDF5,stroke:#059669,color:#172033
+    class scope,sched,state control
+    class append,gather,slots,meta address
+    class backend,kv,hidden gpu

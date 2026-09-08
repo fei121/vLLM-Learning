@@ -1,0 +1,46 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+sequenceDiagram
+    autonumber
+    actor User as 客户端
+    participant Router as API 路由
+    participant Serving as 聊天服务 (OpenAIServingChat)
+    participant LLM as 引擎客户端 (AsyncLLM)
+    participant Input as 输入处理器
+    participant Output as 输出处理器
+    participant MP as 消息通道
+    participant Proc as 引擎核心进程
+
+    User->>Router: POST /v1/chat/completions
+    Router->>Serving: 创建聊天补全
+    Serving->>Serving: 渲染请求 + 采样参数
+    alt 校验或渲染失败
+        Serving-->>Router: 返回错误响应
+        Router-->>User: JSON 错误
+    else stream=true 流式
+        Serving->>LLM: 构造异步生成器
+        Serving-->>Router: 聊天流生成器
+        Router-->>User: 建立流式响应
+        Note over Serving,LLM: 开始迭代生成器后才进入 generate 正文
+        Serving->>LLM: 请求下一个输出
+        LLM->>Input: 处理输入
+        Input-->>LLM: 引擎请求
+        LLM->>LLM: 分配 request_id + 创建收集器
+        LLM->>Output: 先登记输出状态
+        LLM->>MP: 递交请求
+        MP-)Proc: ZMQ ADD 消息
+        Note over Output,Proc: ADD 不建每请求通道；输出按共享 IPC 回传、按 request_id 分流
+    end

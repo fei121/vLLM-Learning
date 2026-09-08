@@ -1,0 +1,35 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#94A3B8"
+---
+flowchart LR
+    q([从一个问题开始]) --> entry[入口与 IPC<br/>API → AsyncLLM → EngineCore]
+    entry --> request[请求状态与 Token 进度<br/>Request / RequestStatus]
+    request --> sched[本轮调度结果<br/>SchedulerOutput]
+    sched --> kv[KV 所有权与地址<br/>KVCacheManager / BlockPool / BlockTables]
+    kv --> run[GPU 执行<br/>runner → attention → sampler]
+    run --> out[外部语义<br/>OutputProcessor → SSE]
+    out --> edge{终止与异常路径是否已覆盖?}
+    edge -->|否：回到对应状态| request
+    edge -->|是| prove[用测试和状态变化验证结论]
+    prove --> q
+
+    classDef question fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef source fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef verify fill:#ECFDF5,stroke:#059669,color:#172033
+    class q,edge question
+    class entry,request,sched,kv,run,out source
+    class prove verify

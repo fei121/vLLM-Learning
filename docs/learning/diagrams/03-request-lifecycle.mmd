@@ -1,0 +1,51 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#94A3B8"
+---
+flowchart LR
+    start([创建 Request]) --> structured{包含 structured output?}
+    structured -->|否| W[WAITING]
+    structured -->|是| WG[WAITING_FOR_STRUCTURED_OUTPUT_GRAMMAR]
+    WG -->|grammar ready| W
+    WG -->|grammar exception| FE[FINISHED_ERROR]
+
+    W -->|普通 admission| R[RUNNING]
+    W -->|异步 remote KV load| WK[WAITING_FOR_REMOTE_KVS]
+    WK --> ready{load 完成时曾被抢占?}
+    ready -->|否| W
+    ready -->|是| P[PREEMPTED]
+    R -->|KV 不足，释放 blocks 并清零 computed| P
+    P -->|重新 admission| R
+
+    R -->|resumable 停止且暂无新输入| WS[WAITING_FOR_STREAMING_REQ]
+    WS -->|新 streaming update| W
+
+    R --> finish{check_stop / 请求级错误}
+    finish -->|EOS 或 stop token| FS[FINISHED_STOPPED]
+    finish -->|max tokens / model len| FL[FINISHED_LENGTH_CAPPED]
+    finish -->|repetition detection| FR[FINISHED_REPETITION]
+    finish -->|grammar / KV load / request error| FE
+
+    active[任一未完成状态] -.->|finish_requests 外部中止| FA[FINISHED_ABORTED]
+
+    classDef decision fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef waiting fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef running fill:#ECFDF5,stroke:#059669,color:#172033
+    classDef finished fill:#F8FAFC,stroke:#64748B,color:#172033
+    class structured,ready,finish decision
+    class W,WG,WK,WS,P waiting
+    class R running
+    class FS,FL,FR,FA,FE finished

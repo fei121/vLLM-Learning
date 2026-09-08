@@ -1,0 +1,47 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#ECFDF5"
+    tertiaryColor: "#FFF7ED"
+    lineColor: "#475569"
+    textColor: "#172033"
+---
+flowchart TD
+    poll[处理输入队列<br/><i>ADD / ABORT / 工具调用</i>] --> work{有待办?}
+    work -->|否| poll
+    work -->|是| stepfn{启用批队列?<br/><i>batch queue</i>}
+    stepfn -->|否| step[执行一轮<br/><i>EngineCore.step</i>]
+    stepfn -->|是| pp[带批队列执行<br/><i>step_with_batch_queue</i>]
+    pp --> reclaimed{回收了完成的批?}
+    reclaimed -->|否：仅入队新批| enqueue
+    reclaimed -->|是| abortq
+    step --> has{调度器有请求?}
+    has -->|否| empty[返回空输出，模型未执行]
+    has -->|是| schedule[调度<br/><i>Scheduler.schedule</i>]
+    schedule --> exec[执行模型<br/><i>execute_model non-block</i>]
+    exec --> grammar[取得语法掩码<br/><i>grammar bitmask</i>]
+    grammar --> future[等待执行结果]
+    future --> sample{模型输出为空?}
+    sample -->|是| samplecall[采样 token<br/><i>sample_tokens</i>]
+    sample -->|否| abortq
+    samplecall --> abortq[处理执行期间到达的中止]
+    abortq --> update[写回输出<br/><i>update_from_output</i>]
+    update --> enqueue[引擎输出入队]
+    empty --> enqueue
+    enqueue --> post[收尾<br/><i>post_step</i>]
+    post --> waitkv{0 token 且仍有调度工作?}
+    waitkv -->|是| yield[让出 GIL，等后台 KV 传输]
+    waitkv -->|否| poll
+    yield --> poll
+
+    classDef decision fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef async fill:#ECFDF5,stroke:#059669,color:#172033
+    class work,stepfn,reclaimed,has,sample,waitkv decision
+    class exec,future,enqueue,yield async

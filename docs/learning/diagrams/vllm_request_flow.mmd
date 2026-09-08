@@ -1,0 +1,65 @@
+---
+config:
+  theme: base
+  look: classic
+  themeVariables:
+    background: "#FFFFFF"
+    mainBkg: "#FFFFFF"
+    primaryColor: "#EAF2FF"
+    primaryBorderColor: "#2563EB"
+    primaryTextColor: "#172033"
+    secondaryColor: "#F5F3FF"
+    tertiaryColor: "#ECFDF5"
+    lineColor: "#475569"
+    textColor: "#172033"
+    clusterBkg: "#F8FAFC"
+    clusterBorder: "#94A3B8"
+---
+flowchart LR
+    client([客户端<br/><i>OpenAI HTTP</i>])
+
+    route[① API 路由层<br/><i>api_server · OpenAIServingChat</i>]:::apiNode
+    engclient[② 引擎客户端<br/><i>AsyncLLM · EngineClient</i>]:::apiNode
+    zmq_down[\ZMQ 下发<br/><i>EngineCoreRequest</i>\]:::zmqNode
+    core_loop[③ EngineCore 主循环<br/><i>busy loop</i>]:::coreNode
+    sched[④ 调度器 + KV Cache<br/><i>Scheduler · waiting / running</i>]:::coreNode
+    executor[⑤ 执行器<br/><i>Executor</i>]:::coreNode
+    worker[⑥ GPU Worker<br/><i>ModelRunner · Sampler</i>]:::gpuNode
+    zmq_up[/ZMQ 回传<br/><i>EngineCoreOutputs</i>/]:::zmqNode
+    outproc[⑦ 输出处理器<br/><i>OutputProcessor · detokenizer</i>]:::apiNode
+
+    client -->|"HTTP POST<br/>/v1/chat/completions"| route
+    route --> engclient
+    engclient --> zmq_down
+    zmq_down --> core_loop
+    core_loop --> sched
+    sched --> executor
+    executor --> worker
+
+    worker -.->|ModelRunnerOutput| executor
+    executor -.-> sched
+    sched -.-> core_loop
+    core_loop --> zmq_up
+    zmq_up --> outproc
+    outproc -->|"RequestOutput<br/>SSE 流式返回"| client
+
+    subgraph legend[图例]
+        direction LR
+        l1[■ API 进程]:::apiNode
+        l2[■ EngineCore 进程]:::coreNode
+
+        l3[■ GPU Worker]:::gpuNode
+        l4[■ ZMQ 通道]:::zmqNode
+        l5[■ 请求下行]:::blueLg
+        l6[■ 结果回传]:::greenLg
+    end
+
+    classDef apiNode fill:#EAF2FF,stroke:#2563EB,color:#172033
+    classDef coreNode fill:#FFF7ED,stroke:#C2410C,color:#172033
+    classDef gpuNode fill:#ECFDF5,stroke:#059669,color:#172033
+    classDef zmqNode fill:#FFFFFF,stroke:#64748B,color:#172033,stroke-dasharray:4 3
+    classDef blueLg fill:#2563EB,stroke:#2563EB,color:#FFFFFF
+    classDef greenLg fill:#059669,stroke:#059669,color:#FFFFFF
+
+    linkStyle 0,1,2,3,4,5,6 stroke:#2563EB,stroke-width:1.5px
+    linkStyle 7,8,9,10,11,12 stroke:#059669,stroke-width:1.5px
